@@ -1,0 +1,18 @@
+{
+  "id": "mimikko_radiant_displacer_fix",
+  "name": "星之迹闪现修复（多模块AI兼容）",
+  "author": "〔填你的论坛ID〕",
+  "version": "1.0",
+  "description": "修复「星之迹-级」的 AI 完全不使用战术系统「闪现」的问题：原版 PHASE_DISPLACER 的 AI 在做落点净空判定时没有排除本舰自身的模块，模块化舰船因此被自己的模块永久否决，AI 永远不会激活闪现（玩家手操不受影响）。本补丁为该舰提供数值与原版逐字段相同的模块兼容版闪现系统，AI 复刻原版判定，唯一差异 = 净空判定不再把本舰自身模块算作障碍。\n仅影响这一艘舰船：不修改原版 displacer，也不改动兽耳助手的任何文件（只在本 mod 内提供数据覆盖与脚本）。\n本补丁的发布已获得兽耳助手作者许可。",
+  "gameVersion": "0.98a-RC8",
+  "jars": [
+    "jars/mimikko_radiant_displacer_fix.jar"
+  ],
+  "modPlugin": "data.scripts.mimikko_radiant_displacer_fix.ModFixPlugin",
+  "dependencies": [
+    {
+      "id": "Mimikko",
+      "name": "兽耳助手！"
+    }
+  ]
+}

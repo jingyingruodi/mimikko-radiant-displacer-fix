@@ -1,0 +1,13 @@
+# 构建产物
+build/
+out/
+*.class
+# 编辑器 / 系统垃圾
+.idea/
+*.iml
+.vscode/
+.DS_Store
+desktop.ini
+Thumbs.db
+*.swp
+*~

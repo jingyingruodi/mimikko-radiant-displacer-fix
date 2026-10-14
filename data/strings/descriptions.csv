@@ -1,0 +1,3 @@
+id,type,text1,text2,text3,text4,text5,notes
+mimikko_kasutariri_radiant_displacer,SHIP_SYSTEM,将舰船闪现至航向前方的一个地点。该系统可以缓慢累积三次传送，且冷却时间很短。,机动,向行驶方向瞬移，可充能三次。,,舰船将被传送 {{300}} 单位距离。,
+mimikko_kasutariri_radiant_blink,SHIP_SYSTEM,将舰船立即传送至近距离指定目的地。该系统可以缓慢累积三次传送。,机动,向目标方向瞬移，可充能三次。,,传送目标位置距离最远可达 {{300}} 单位距离。,
