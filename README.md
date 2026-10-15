@@ -240,3 +240,10 @@ data/strings/descriptions.csv                   # 新系统的文本（照抄 di
 
 > 编译产物只放在 `jars/` 里，mod 内不留 `build/`（避免被脚本扫描器误读）。
 > 重编时用上面的命令输出到任意临时目录，再打进 jar 即可。
+
+## 依赖
+
+- **直接依赖（唯一）：`Mimikko`（兽耳助手！）**——本补丁针对该 mod 的「星之迹-级」，需要它存在才有意义。
+- 除此之外**不声明任何依赖**：脚本只用游戏本体公开 API（未引用 LazyLib / MagicLib / GraphicsLib / BoxUtil / SIOP 等任何 mod 的 API）。
+- 兽耳助手自身依赖什么，请按其说明书安装；本补丁**不做依赖传递**。
+
