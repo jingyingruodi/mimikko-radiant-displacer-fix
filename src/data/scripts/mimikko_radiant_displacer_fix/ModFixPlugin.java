@@ -13,8 +13,8 @@ import com.fs.starfarer.api.fleet.FleetMemberAPI;
  * 补丁入口。
  *
  * <ol>
- *   <li>{@link #onApplicationLoad()}：把星之迹的战术系统指向多模块兼容版闪现，
- *       并把驱动用隐藏船插加为内置（不依赖 mod 加载顺序）。</li>
+ *   <li>{@link #onApplicationLoad()}：把星之迹的战术系统指向多模块兼容版闪现
+ *       （公开 API {@code setShipSystemId}，与 mod 加载顺序无关；隐藏船插保留但未挂载）。</li>
  *   <li>{@link #pickShipAI}：引擎给每艘船创建 AI 时都会问一次 mod 插件——
  *       借这个必然发生的时机注册"每帧战斗插件"（{@link DisplacerFixCombatPlugin}），
  *       然后返回 {@code null}，**不接管舰船 AI**，保持原版行为。</li>

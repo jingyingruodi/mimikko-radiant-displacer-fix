@@ -30,17 +30,20 @@
 友军之外全部保留原版规则：跳过战机/穿梭舱；落点离敌舰 < 半径和 + 50 → 否决；
 落点附近有敌方导弹 → 否决（原版还比较护盾覆盖与碰撞体，公开 API 不可得，此处按距离近似）。
 
-**交付**：`mods/兽耳助手mimikko098v0.762/data/hulls/ship_data.csv` 星之迹行的 `system id`
-→ `mimikko_kasutariri_radiant_displacer`（已备份）。
+**交付方式（全部在本 mod 目录内完成，不改动任何外部文件）**：
 
-**回退**：把该行改回 `displacer`，或从
-把该行改回 `displacer`（或从你自己的备份恢复）即可。
+- `data/shipsystems/mimikko_kasutariri_radiant_displacer.system`：新系统（数值照抄原版 `displacer`，只改 id/aiType/aiScript）；
+- `data/shipsystems/ship_systems.csv`、`data/strings/descriptions.csv`：新系统的数值行与文本；
+- `data/hulls/ship_data.csv`：**仅星之迹一行**的覆盖（system id 指向新系统，备用路径）；
+- `ModFixPlugin.onApplicationLoad()`：启动时对星之迹的 hull spec 调用 `setShipSystemId(...)`（主路径，与 mod 加载顺序无关）。
+
+**回退**：在 `enabled_mods.json` 里移除 `mimikko_radiant_displacer_fix`，或直接删除本 mod 目录，即完全恢复原版行为。
 
 ### 备选（路线 A）：原版 AI 驱动的瞬移系统
 
 同目录另附 `mimikko_kasutariri_radiant_blink`（`type:TELEPORTER` + `aiType:PHASE_TELEPORTER_2`，数值照抄闪现）。
 零自定义 AI 代码、完全由引擎驱动，但位移语义是"瞬移到 AI 选定目标点"。
-切换只需把上述两处 `system id` 改成该 id。
+如需改用该方案：改 `ModFixPlugin.SYSTEM_ID` 常量并重新编译 jar（或改 `data/hulls/ship_data.csv` 的行并停用插件覆盖；**只改 CSV 行会被插件覆盖，不够**）。
 
 ## 根因（为什么原版 AI 不用闪现）
 
@@ -90,9 +93,9 @@ module.setFacing(slot.computeMidArcAngle(parent));                     // 与本
 ```
 
 自定义 AI（源码见 `src/`）逻辑与原版对齐（间隔 0.25–0.5s、同样的落点计算、
-同样的判定①/②、目标距离 > range+200 时用于接近），
-**唯独在净空判定中跳过本舰自身模块**（`s.getParentStation() == 本舰` 或在本舰
-`getChildModulesCopy()` 内）。仅使用公开 API，不依赖混淆类。
+同样的判定①/②、目标距离 > range+200 时用于接近），**唯一实质差异是落点净空判定
+不再把同属主（友军）舰船算作障碍——其中就包括本舰自身的全部模块**（模块化舰船正是被
+自己的模块永久否决的）。友军之外的判定（敌舰、敌方导弹）与原版一致。仅使用公开 API，不依赖混淆类。
 
 ### 主路径：每帧战斗插件（由 pickShipAI 注册，无前置条件）
 
@@ -109,24 +112,14 @@ module.setFacing(slot.computeMidArcAngle(parent));                     // 与本
 这条路径**不依赖**：舰船 AI 是不是 `BasicShipAI`、船插有没有真的挂上、系统 id 有没有换成功——
 因此是最可靠的一层。
 
-### 第二层：每帧船插驱动
+### 备用驱动层（都不是主路径）
 
-实测发现：只靠 `.system` 的 `aiScript` **并不一定被驱动**（本机 0 条日志），因为
-引擎只在 `BasicShipAI` 里创建"系统 AI"，而：
+- `aiScript`（`.system` 的 `aiType: CUSTOM`）：仅当引擎真的驱动系统 AI 时才生效——其它 mod 整条接管舰船 AI、
+  或 `BasicShipAI` 在 `controlsLocked` 时逐帧 `blockCommandForOneFrame(USE_SYSTEM)`，都不会跑；
+- 隐藏船插 `DisplacerFixHullMod` + `data/hullmods/hull_mods.csv`：**当前未挂载**（保留作回退方案）；
+- `data/hulls/ship_data.csv` 覆盖行：与插件路径幂等（若恰好生效，结果一致）。
 
-- 其它 mod 可以整条接管舰船 AI（`ModPlugin.pickShipAI`），此时 `BasicShipAI` 不存在；
-- `BasicShipAI.advance()` 在 `ship.controlsLocked()` 为真时会**逐帧
-  `blockCommandForOneFrame(USE_SYSTEM)`**，系统同样用不出来。
-
-因此本补丁的主路径改为：给星之迹加一个**隐藏内置船插**
-`mimikko_radiant_displacer_fix_hullmod` → `DisplacerFixHullMod`。
-船插的 `advanceInCombat(ship, amount)` 由引擎**对每艘船每帧调用**，与"谁在开这条船"无关：
-
-- 判定与原版 AI 对齐：系统空闲有弹药 → 落点净空（**跳过自身模块**）→ 目标超出 `range+200`；
-- 每 3 秒打印一条诊断（`[displacerFix]`，见下）；
-- 玩家自己的座舰不干预（由玩家手操）。
-
-三者（船插 + `aiScript` + `ship_data.csv` 覆盖行）互相幂等，谁生效结果都一样。
+实际运行的主力是**上一节的每帧战斗插件**（由 `pickShipAI` 注册）；其余路径都是兜底，谁生效结果都一样。
 
 ### 诊断日志
 
@@ -173,7 +166,7 @@ INFO [...] data.scripts.mimikko_radiant_displacer_fix.ModFixPlugin - [onApplicat
 | 每 0.25–0.5s 评估一次（`IntervalTracker(0.25,0.5)`） | ✅ 一致 |
 | 系统激活中 / 冷却中 / 无弹药 / 不可激活 → 返回 | ✅ 一致 |
 | 落点 = 本体位置 + `range` × 行驶方向 | ✅ 一致 |
-| 净空判定闸门（不可行即返回，所有路径共用） | ✅ 一致，**但跳过本舰自身模块** ← 唯一实质修改 |
+| 净空判定闸门（不可行即返回，所有路径共用） | ✅ 结构一致；**同属主（友军，含本舰全部模块）舰船不再阻塞落点** ← 唯一实质修改 |
 | `loc14`：`range > randomRange + 200` | ✅ 一致 |
 | `loc11`：移动 AI 期望航向 与 当前运动方向 夹角 < 20° | ⚠️ 近似：以 `MOVEMENT_DEST` 方向作为"期望航向" |
 | ① 非交战 + 距命令目的地 > `range+500` → 赶路用 | ✅ 结构一致（`engaged` 以"是否有活目标"近似） |
@@ -197,8 +190,8 @@ INFO [...] data.scripts.mimikko_radiant_displacer_fix.ModFixPlugin - [onApplicat
 
 ## 启用 / 卸载
 
-**启用**：在 `mods/enabled_mods.json` 的列表里加入 `"mimikko_radiant_displacer_fix"`，
-**并放在 `"Mimikko"` 之后**（后加载者覆盖先加载者；新加的 mod 一般本来就在末尾）。
+**启用**：在 `mods/enabled_mods.json` 的列表里加入 `"mimikko_radiant_displacer_fix"` 即可
+（`mod_info.json` 已声明依赖 `Mimikko`；插件路径与加载顺序无关；CSV 覆盖行想生效可放在 `Mimikko` 之后，非必需）。
 
 **卸载**：把该 id 从 `enabled_mods.json` 移除即可，或直接删除
 `mods/mimikko_radiant_displacer_fix/` 整个目录。不修改游戏本体、不修改兽耳助手文件。
@@ -221,21 +214,22 @@ cd <游戏根目录>
 JAVAC=/usr/lib/jvm/java-25-openjdk-amd64/bin/javac   # 需 JDK 17+
 $JAVAC --release 17 -encoding UTF-8 \
   -cp "starfarer.api.jar:lwjgl.jar:lwjgl_util.jar" \
-  -d build/classes \
-  src/data/scripts/mimikko_radiant_displacer_fix/MimikkoModularDisplacerAI.java
-# 然后把 build/classes/data/... 打进 jars/mimikko_radiant_displacer_fix.jar
+  -d /tmp/build $(find src -name '*.java')
+# 然后把 /tmp/build/data/... 按原路径打进 jars/mimikko_radiant_displacer_fix.jar
 ```
 
 ## 文件清单
 
 ```
 mod_info.json
-jars/mimikko_radiant_displacer_fix.jar          # 编译后的 AI 类
-src/data/scripts/mimikko_radiant_displacer_fix/MimikkoModularDisplacerAI.java
-data/shipsystems/mimikko_kasutariri_radiant_displacer.system   # 新系统（照抄 displacer，改 id/aiType/aiScript）
-data/shipsystems/ship_systems.csv               # 新系统的数值行（照抄 vanilla displacer 行）
-data/hulls/ship_data.csv                        # 仅星之迹一行，system id 改为新系统
-data/strings/descriptions.csv                   # 新系统的文本（照抄 displacer 文本）
+jars/mimikko_radiant_displacer_fix.jar          # 5 个类：ModFixPlugin / DisplacerFixCombatPlugin / DisplacerDriver / MimikkoModularDisplacerAI / DisplacerFixHullMod
+src/data/scripts/mimikko_radiant_displacer_fix/ # 对应的 5 个 .java 源码
+data/shipsystems/mimikko_kasutariri_radiant_displacer.system  # 新系统（照抄 displacer，改 id/aiType/aiScript）
+data/shipsystems/mimikko_kasutariri_radiant_blink.system       # 备选系统（TELEPORTER，默认不启用）
+data/shipsystems/ship_systems.csv               # 两个系统的数值行（照抄 vanilla displacer 行）
+data/hulls/ship_data.csv                        # 仅星之迹一行（system id 指向新系统，备用）
+data/hullmods/hull_mods.csv                     # 隐藏船插（当前未挂载，备用）
+data/strings/descriptions.csv                   # 两个系统的文本（照抄 displacer 文本）
 ```
 
 > 编译产物只放在 `jars/` 里，mod 内不留 `build/`（避免被脚本扫描器误读）。
