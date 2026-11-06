@@ -247,3 +247,7 @@ data/strings/descriptions.csv                   # 两个系统的文本（displa
 - 除此之外**不声明任何依赖**：脚本只用游戏本体公开 API（未引用 LazyLib / MagicLib / GraphicsLib / BoxUtil / SIOP 等任何 mod 的 API）。
 - 兽耳助手自身依赖什么，请按其说明书安装；本补丁**不做依赖传递**。
 
+## 许可证
+
+本仓库代码与文档采用 **MIT 许可证**（见 [LICENSE](LICENSE)，Copyright © 2026 镜影若滴 / jingyingruodi）。
+本仓库不包含游戏本体或兽耳助手的任何文件/素材；本补丁发布已获兽耳助手作者许可。
