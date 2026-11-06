@@ -11,3 +11,10 @@ desktop.ini
 Thumbs.db
 *.swp
 *~
+
+# 发布/日志/备份类文件（不应进仓库）
+*.log
+*.zip
+*.rar
+*.7z
+*.bak

@@ -43,7 +43,7 @@
 
 同目录另附 `mimikko_kasutariri_radiant_blink`（`type:TELEPORTER` + `aiType:PHASE_TELEPORTER_2`，数值照抄闪现）。
 零自定义 AI 代码、完全由引擎驱动，但位移语义是"瞬移到 AI 选定目标点"。
-如需改用该方案：改 `ModFixPlugin.SYSTEM_ID` 常量并重新编译 jar（或改 `data/hulls/ship_data.csv` 的行并停用插件覆盖；**只改 CSV 行会被插件覆盖，不够**）。
+如需改用该方案：改 `ModFixPlugin.SYSTEM_ID` 常量并重新编译 jar；或移除插件里的 `setShipSystemId` 调用后改 `data/hulls/ship_data.csv` 的行（**只改 CSV 行会被插件覆盖，不够**）。
 
 ## 根因（为什么原版 AI 不用闪现）
 
@@ -78,8 +78,9 @@ module.setFacing(slot.computeMidArcAngle(parent));                     // 与本
 **300 < 405 → 判定必然失败 → AI 每次都直接返回，永不激活系统。**
 原版单舰 `radiant` 没有模块，落点干净，所以正常闪现。
 
-参考：中文论坛已有两次同样报告（2025-01-27 / 2025-01-30，均无人解答）：
-<https://www.fossic.org/thread-13760-1-1.html>
+参考：中文论坛已有同类报告：
+- 2025-01-30《关于模块船不会闪现的问题》：<https://www.fossic.org/thread-13760-1-1.html>
+- 2025-03-17 相关讨论（其中提到本舰 AI 不用闪现）：<https://www.fossic.org/thread-14726-1-1.html>
 
 ## 修复方式
 
@@ -103,10 +104,11 @@ module.setFacing(slot.computeMidArcAngle(parent));                     // 与本
 本补丁在里面注册一个 `EveryFrameCombatPlugin`（`DisplacerFixCombatPlugin`），
 然后返回 `null`（**不接管舰船 AI**，原版行为不变）。
 
-该插件每帧遍历战场，对"星之迹船系"（`mimikko_kasutariri_radiant*`，含模块）
-或"装着本补丁系统的船"：
+该插件每帧遍历战场，收集所有舰船、并用模块的 `getParentStation()` 反查模块化舰船的核心舰
+（核心舰不在 `getShips()` 里；**只驱动核心舰，模块本身不驱动**），然后对"星之迹船系"
+（`mimikko_kasutariri_radiant*`）或"装着本补丁系统的船"：
 
-- 打印完整诊断（船体 / 系统 id / 舰船 AI 类 / `controlsLocked` / 模块数 / 弹药 / 目标距离 / 船插列表）；
+- 打印限流诊断（船体 / 弹药 / 系统状态 / 速度 / 是否撤退 / 目标与目的地距离）；
 - 若船上是闪现类系统（我们的或原版 `displacer`）、且不是玩家座舰，则按模块兼容规则驱动激活。
 
 这条路径**不依赖**：舰船 AI 是不是 `BasicShipAI`、船插有没有真的挂上、系统 id 有没有换成功——
@@ -126,13 +128,16 @@ module.setFacing(slot.computeMidArcAngle(parent));                     // 与本
 `starsector.log` 中：
 
 ```
-[displacerFix] <shipId> sys=... ai=<舰船 AI 类> controlsLocked=<bool> shipWithModules=<bool>
-               ammo=3/3 active=false cd=0.0 target=<id>(d=1234)
-[displacerFix] skip: <原因>            或   [displacerFix] USE SYSTEM -> active=true state=...
-[displacerAI]  alive: ship=... system=... hasEngine=...      ← 仅当 aiScript 路径被驱动时才出现
+[displacerFix] (interval 0.07) hull=<hullId> ammo=3/3 state=IDLE speed=123 retreating=false target=<id>(d=1234) moveDest=567
+[displacerFix] skip: <否决原因> <同上状态>                        ← 本帧判定"暂不激活"时的原因
+[displacerFix] USE SYSTEM (<原因>) hull=<hullId> ammo=2 state=IDLE   ← 真正触发闪现
+[displacerFix] roster(<n>): <hull>|<sys>|A ...                    ← 战斗开始时打印 1~2 次
+[displacerAI]  alive: ship=... system=... hasEngine=...            ← 仅当 aiScript 路径被驱动时才出现
 ```
 
-`ai=` 与 `controlsLocked=` 这两项即可判定到底是"AI 被别的 mod 接管"还是"控制权被锁"。
+用 `hull=` 确认是不是目标舰；`state=`/`ammo=`/`target=`/`moveDest=` 判断系统与目标状态；`skip:` 行给出否决原因。
+（当前**未**打印舰船 AI 类 / `controlsLocked` / 船插列表；需要时可在 `DisplacerDriver.status()` 里自行加
+`ship.getShipAI()`、`ship.controlsLocked()` 等公开 API。）
 
 
 ### 系统 id 的指定方式（双保险）
@@ -149,15 +154,14 @@ module.setFacing(slot.computeMidArcAngle(parent));                     // 与本
 启动时日志会打印一行，可直接确认（`starsector.log`）：
 
 ```
-INFO [...] data.scripts.mimikko_radiant_displacer_fix.ModFixPlugin - [onApplicationLoad]
-    mimikko_kasutariri_radiant_1 ship system: <改前> -> mimikko_kasutariri_radiant_displacer
+INFO [...] data.scripts.mimikko_radiant_displacer_fix.ModFixPlugin - [onApplicationLoad] mimikko_kasutariri_radiant_1 ship system: displacer -> mimikko_kasutariri_radiant_displacer (原版闪现本体 + 兼容多模块的 AI)
 ```
 
-其中 `<改前>` 若为 `displacer`，即说明 CSV 行覆盖确实输了、由插件兜底。
+其中 `ship system:` 后的旧值若为 `displacer`，说明 CSV 行覆盖确实输了、由插件兜底（正常）。
 
-### 判定逻辑：复刻原版 `voidsuper`（唯一改动 = 跳过自身模块）
+### 判定逻辑：复刻原版 `voidsuper`（唯一改动 = 同属主友军不再阻塞落点）
 
-判定/激活在 `DisplacerDriver`（战斗插件 / 船插 / aiScript 三层共用同一份）。
+判定/激活在 `DisplacerDriver`（战斗插件与 `aiScript` 共用同一份；隐藏船插当前未挂载）。
 
 **保留的原版结构与条件**：
 
@@ -170,7 +174,7 @@ INFO [...] data.scripts.mimikko_radiant_displacer_fix.ModFixPlugin - [onApplicat
 | `loc14`：`range > randomRange + 200` | ✅ 一致 |
 | `loc11`：移动 AI 期望航向 与 当前运动方向 夹角 < 20° | ⚠️ 近似：以 `MOVEMENT_DEST` 方向作为"期望航向" |
 | ① 非交战 + 距命令目的地 > `range+500` → 赶路用 | ✅ 结构一致（`engaged` 以"是否有活目标"近似） |
-| ② `isRetreating()` → 撤退用 | ✅ 一致 |
+| ② `isRetreating()` → 撤退用 | ✅ 主体一致（朝向门控为近似：速度方向 vs 舰首 <60°） |
 | ③ 危险规避（导弹/碰撞/护盾未覆盖） | ⚠️ 近似：改为"有来袭导弹靠近" |
 | ④ 目标过载/排热 > 5 秒 → 突进 | ✅ 一致 |
 | 充能保留 / 武器射程门控 / 额外激活间隔 | ❌ 已移除（原版没有，属上一版的臆造） |
@@ -191,7 +195,7 @@ INFO [...] data.scripts.mimikko_radiant_displacer_fix.ModFixPlugin - [onApplicat
 ## 启用 / 卸载
 
 **启用**：在 `mods/enabled_mods.json` 的列表里加入 `"mimikko_radiant_displacer_fix"` 即可
-（`mod_info.json` 已声明依赖 `Mimikko`；插件路径与加载顺序无关；CSV 覆盖行想生效可放在 `Mimikko` 之后，非必需）。
+（`mod_info.json` 已声明依赖 `Mimikko`；插件路径与加载顺序无关。CSV 覆盖行是"先处理者生效"，想靠它生效反而需放在 `Mimikko` **之前**——但通常不需要，插件会兜底）。
 
 **卸载**：把该 id 从 `enabled_mods.json` 移除即可，或直接删除
 `mods/mimikko_radiant_displacer_fix/` 整个目录。不修改游戏本体、不修改兽耳助手文件。
@@ -210,10 +214,10 @@ INFO [...] data.scripts.mimikko_radiant_displacer_fix.ModFixPlugin - [onApplicat
 ## 重新编译
 
 ```bash
-cd <游戏根目录>
-JAVAC=/usr/lib/jvm/java-25-openjdk-amd64/bin/javac   # 需 JDK 17+
-$JAVAC --release 17 -encoding UTF-8 \
-  -cp "starfarer.api.jar:lwjgl.jar:lwjgl_util.jar" \
+cd <本 mod 目录>          # 内含 src/、jars/
+GAME=<游戏根目录>
+javac --release 17 -encoding UTF-8 \                # 用 PATH 里的 javac（需 JDK 17+）
+  -cp "$GAME/starfarer.api.jar:$GAME/lwjgl.jar:$GAME/lwjgl_util.jar:$GAME/log4j-1.2.9.jar" \
   -d /tmp/build $(find src -name '*.java')
 # 然后把 /tmp/build/data/... 按原路径打进 jars/mimikko_radiant_displacer_fix.jar
 ```
@@ -229,8 +233,10 @@ data/shipsystems/mimikko_kasutariri_radiant_blink.system       # 备选系统（
 data/shipsystems/ship_systems.csv               # 两个系统的数值行（照抄 vanilla displacer 行）
 data/hulls/ship_data.csv                        # 仅星之迹一行（system id 指向新系统，备用）
 data/hullmods/hull_mods.csv                     # 隐藏船插（当前未挂载，备用）
-data/strings/descriptions.csv                   # 两个系统的文本（照抄 displacer 文本）
+data/strings/descriptions.csv                   # 两个系统的文本（displacer 行照抄原版；blink 行为自写）
 ```
+
+仓库根还有：`README.md`（本文件）、`发布帖正文.md`（论坛发帖稿）、`授权与致谢.md`、`.gitignore`——这些不是游戏运行所需文件。
 
 > 编译产物只放在 `jars/` 里，mod 内不留 `build/`（避免被脚本扫描器误读）。
 > 重编时用上面的命令输出到任意临时目录，再打进 jar 即可。
